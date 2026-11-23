@@ -1,0 +1,22 @@
+[package]
+name = "firemix"
+version = "0.1.0"
+edition = "2024"
+default-run = "firemix"
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "7"
+tokio = { version = "1", features = ["full"] }
+thiserror = "2"
+
+# FireWire & ALSA Protocols (из crates.io)
+glib = "0.20"
+hinawa = "0.12"
+firewire-dice-protocols = { git = "https://github.com/alsa-project/snd-firewire-ctl-services", rev = "7654d40cb0e62426e460c0b94605e2a4b506d6bb" }
+firewire-bebob-protocols = { git = "https://github.com/alsa-project/snd-firewire-ctl-services", rev = "7654d40cb0e62426e460c0b94605e2a4b506d6bb" }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
