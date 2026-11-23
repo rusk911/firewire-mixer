@@ -626,6 +626,31 @@ fn include_muted_sources(entries: &RouterParams, available: &mut Tcd22xxAvailabl
 	}
 }
 
+fn destination_port_id(block: DstBlk) -> String {
+	format!("{:?}:{}", block.id, block.ch)
+}
+
+fn source_group(id: SrcBlkId) -> &'static str {
+	match id {
+		SrcBlkId::Ins0 | SrcBlkId::Ins1 | SrcBlkId::Aes | SrcBlkId::Adat => "Physical Inputs",
+		SrcBlkId::Avs0 | SrcBlkId::Avs1 => "DAW Playback",
+		SrcBlkId::Mixer => "Mixer Outputs",
+		SrcBlkId::ArmAprAudio => "System Audio",
+		SrcBlkId::Mute => "Disconnected",
+		SrcBlkId::Reserved(_) => "Other",
+	}
+}
+
+fn destination_group(id: DstBlkId) -> &'static str {
+	match id {
+		DstBlkId::Ins0 | DstBlkId::Ins1 | DstBlkId::Aes | DstBlkId::Adat => "Physical Outputs",
+		DstBlkId::Avs0 | DstBlkId::Avs1 => "DAW / FireWire Inputs",
+		DstBlkId::MixerTx0 | DstBlkId::MixerTx1 => "Mixer Inputs",
+		DstBlkId::ArmApbAudio => "System Audio",
+		DstBlkId::Reserved(_) => "Other",
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -756,30 +781,5 @@ mod tests {
 		assert_eq!(daw_destinations, (1..=daw_destinations.len()).map(|number| format!("DAW {number}")).collect::<Vec<_>>());
 		println!("DAW: {} playback, {} capture", daw_sources.len(), daw_destinations.len());
 		println!("{} sources, {} destinations", state.sources.len(), state.destinations.len());
-	}
-}
-
-fn destination_port_id(block: DstBlk) -> String {
-	format!("{:?}:{}", block.id, block.ch)
-}
-
-fn source_group(id: SrcBlkId) -> &'static str {
-	match id {
-		SrcBlkId::Ins0 | SrcBlkId::Ins1 | SrcBlkId::Aes | SrcBlkId::Adat => "Physical Inputs",
-		SrcBlkId::Avs0 | SrcBlkId::Avs1 => "DAW Playback",
-		SrcBlkId::Mixer => "Mixer Outputs",
-		SrcBlkId::ArmAprAudio => "System Audio",
-		SrcBlkId::Mute => "Disconnected",
-		SrcBlkId::Reserved(_) => "Other",
-	}
-}
-
-fn destination_group(id: DstBlkId) -> &'static str {
-	match id {
-		DstBlkId::Ins0 | DstBlkId::Ins1 | DstBlkId::Aes | DstBlkId::Adat => "Physical Outputs",
-		DstBlkId::Avs0 | DstBlkId::Avs1 => "DAW / FireWire Inputs",
-		DstBlkId::MixerTx0 | DstBlkId::MixerTx1 => "Mixer Inputs",
-		DstBlkId::ArmApbAudio => "System Audio",
-		DstBlkId::Reserved(_) => "Other",
 	}
 }
