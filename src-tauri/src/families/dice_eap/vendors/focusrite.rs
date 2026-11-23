@@ -26,7 +26,7 @@ pub fn write_saffire_pro40_nickname(
 	req: &FwReq,
 	nickname: &str,
 ) -> Result<(), String> {
-	if nickname.as_bytes().len() > PRO40_NICKNAME_BYTES {
+	if nickname.len() > PRO40_NICKNAME_BYTES {
 		return Err(format!(
 			"Focusrite nickname exceeds {PRO40_NICKNAME_BYTES} UTF-8 bytes"
 		));

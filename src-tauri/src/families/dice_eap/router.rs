@@ -580,7 +580,7 @@ fn source_partner<P: Tcd22xxSpecification>(source: SrcBlk, available: &Tcd22xxAv
 		SrcBlkId::Avs0 | SrcBlkId::Avs1 => {
 			let stream_index = usize::from(source.id == SrcBlkId::Avs1);
 			let preceding: usize = streams.pair.rx_entries.iter().take(stream_index).map(|entry| entry.pcm_count as usize).sum();
-			if (preceding + source.ch as usize) % 2 != 0 { return None; }
+			if !(preceding + source.ch as usize).is_multiple_of(2) { return None; }
 			let current = streams.pair.rx_entries.get(stream_index)?;
 			if source.ch.checked_add(1)? < current.pcm_count {
 				SrcBlk { id: source.id, ch: source.ch + 1 }
@@ -593,7 +593,7 @@ fn source_partner<P: Tcd22xxSpecification>(source: SrcBlk, available: &Tcd22xxAv
 		_ => {
 			let descriptor = P::INPUTS.iter().find(|port| port.id == source.id && source.ch >= port.offset && source.ch < port.offset + port.count);
 			let offset = descriptor.map_or(0, |port| port.offset);
-			if (source.ch - offset) % 2 != 0 { return None; }
+			if !(source.ch - offset).is_multiple_of(2) { return None; }
 			let channel = source.ch.checked_add(1)?;
 			if descriptor.is_some_and(|port| channel >= port.offset + port.count) { return None; }
 			SrcBlk { id: source.id, ch: channel }

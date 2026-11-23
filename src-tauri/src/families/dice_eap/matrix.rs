@@ -348,11 +348,10 @@ impl MatrixStore {
     }
 
     pub fn stop_peak_polling(&self, node_path: &str) {
-        if let Ok(mut pollers) = self.pollers.lock() {
-            if let Some(stop) = pollers.remove(node_path) {
+        if let Ok(mut pollers) = self.pollers.lock()
+            && let Some(stop) = pollers.remove(node_path) {
                 stop.store(true, Ordering::Release);
             }
-        }
     }
 
     pub fn invalidate(&self, node_path: &str) {
@@ -658,8 +657,8 @@ pub(super) fn destination_block_label<P: Tcd22xxSpecification>(block: DstBlk) ->
     let descriptor = P::OUTPUTS.iter().find(|port| {
         port.id == block.id && block.ch >= port.offset && block.ch < port.offset + port.count
     });
-    if let Some(port) = descriptor {
-        if port.label.is_none() && matches!(port.id, DstBlkId::Ins0 | DstBlkId::Ins1) {
+    if let Some(port) = descriptor
+        && port.label.is_none() && matches!(port.id, DstBlkId::Ins0 | DstBlkId::Ins1) {
             let previous_count: usize = P::OUTPUTS.iter()
                 .take_while(|candidate| !std::ptr::eq(*candidate, port))
                 .filter(|candidate| candidate.label.is_none() && matches!(candidate.id, DstBlkId::Ins0 | DstBlkId::Ins1))
@@ -667,7 +666,6 @@ pub(super) fn destination_block_label<P: Tcd22xxSpecification>(block: DstBlk) ->
                 .sum();
             return format!("Line Out {}", previous_count + (block.ch - port.offset) as usize + 1);
         }
-    }
     let (base, offset) = descriptor
         .map(|port| (port.label.unwrap_or_else(|| default_destination_name(block.id)), port.offset))
         .unwrap_or_else(|| (default_destination_name(block.id), 0));

@@ -88,12 +88,11 @@ impl MixerSessions {
 		let _guard = self.save_lock.lock().map_err(|_| "Mixer save lock poisoned".to_owned())?;
 		save_configuration(node, store, mixer)?;
 		let mut entries = self.entries.lock().map_err(|_| "Mixer session lock poisoned".to_owned())?;
-		if let Some(entry) = entries.get_mut(node) {
-			if entry.revision <= revision {
+		if let Some(entry) = entries.get_mut(node)
+			&& entry.revision <= revision {
 				entry.dirty = false;
 				entry.updates.clear();
 			}
-		}
 		Ok(())
 	}
 
@@ -109,13 +108,12 @@ impl MixerSessions {
 			}
 			save_configuration(node, store, pending.mixer)?;
 			let mut entries = self.entries.lock().map_err(|_| "Mixer session lock poisoned".to_owned())?;
-			if let Some(entry) = entries.get_mut(node) {
-				if entry.revision == pending.revision {
+			if let Some(entry) = entries.get_mut(node)
+				&& entry.revision == pending.revision {
 					entry.dirty = false;
 					entry.updates.clear();
 					return Ok(());
 				}
-			}
 		}
 	}
 

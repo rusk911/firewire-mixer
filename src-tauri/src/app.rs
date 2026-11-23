@@ -340,13 +340,11 @@ fn open_mixer_window<R: Runtime>(app: &AppHandle<R>, node_path: &str) {
 }
 
 fn close_mixer_window<R: Runtime>(app: &AppHandle<R>, node_path: &str) {
-    if let Some(label) = window_label(node_path) {
-        if let Some(window) = app.get_webview_window(&label) {
-            if let Err(error) = window.close() {
+    if let Some(label) = window_label(node_path)
+        && let Some(window) = app.get_webview_window(&label)
+            && let Err(error) = window.close() {
                 eprintln!("Failed to close disconnected mixer window {label}: {error}");
             }
-        }
-    }
 }
 
 fn window_label(node_path: &str) -> Option<String> {
