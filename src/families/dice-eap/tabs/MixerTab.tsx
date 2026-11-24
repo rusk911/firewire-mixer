@@ -19,7 +19,7 @@ function PeakMeter({ levels, label }: { levels: (number | null)[]; label: string
     <div className="strip-meters" aria-label={label}>
       {levels.map((level, index) => (
         <div className="strip-meter" key={index}>
-          <div className="strip-meter-fill" style={{ height: `${meterLevel(level)}%` }} />
+          <div className="strip-meter-fill" style={{ "--level": `${meterLevel(level)}%` } as CSSProperties} />
         </div>
       ))}
     </div>

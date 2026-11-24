@@ -417,7 +417,7 @@ select {
 .strip-fader:focus-within .strip-fader-cap { outline: 2px solid #e5a678; outline-offset: 2px; }
 .strip-meters { display: flex; width: 12px; height: 100%; gap: 2px; padding: 2px 0; }
 .strip-meter { position: relative; width: 100%; height: 100%; overflow: hidden; border: 1px solid #34463d; background: #0b1510; }
-.strip-meter-fill { position: absolute; right: 0; bottom: 0; left: 0; background: linear-gradient(to top, #5ab886, #7fc469 72%, #d7bc57 90%, #e1735f); transition: height 90ms linear; }
+.strip-meter-fill { position: absolute; inset: 0; background: linear-gradient(to top, #5ab886 0%, #7fc469 72%, #d7bc57 90%, #e1735f 100%); clip-path: inset(calc(100% - var(--level, 0%)) 0 0 0); transition: clip-path 90ms linear; }
 .strip-value { color: #d9e3dc; font-family: "IBM Plex Mono", monospace; font-size: 9px; text-align: center; }
 .master-heading { display: grid; min-width: 0; gap: 2px; }
 .master-heading span { color: #e3a782; font-size: 9px; font-weight: 700; }
