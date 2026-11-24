@@ -1,5 +1,6 @@
 # FireMix (Modern Linux FireWire Audio Interface Mixer)
 Mixer for firewire audio interfaces
+![FireMix main interface](img/main-mixer.png)
 
 ## Ubuntu Build Dependencies
 
@@ -8,7 +9,7 @@ Install the system packages required to build the Tauri application:
 ```bash
 sudo apt update
 sudo apt install -y build-essential pkg-config curl wget file libssl-dev \
-	libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev
+        libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev
 ```
 
 `libwebkit2gtk-4.1-dev` provides the WebKitGTK, JavaScriptCoreGTK, and libsoup
