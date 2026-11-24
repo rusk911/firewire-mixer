@@ -769,7 +769,8 @@ select {
 .matrix-viewport {
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #33433e;
   background: rgba(15, 25, 23, 0.6);
 }
@@ -1045,9 +1046,13 @@ select {
 .matrix-viewport {
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #33433e;
   background: rgba(15, 25, 23, 0.6);
+}
+.matrix-viewport .rotary-cell {
+  overflow: hidden;
 }
 
 .matrix-grid {
