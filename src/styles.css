@@ -37,6 +37,10 @@ body {
   background:
     radial-gradient(ellipse at 92% 0%, rgba(86, 128, 111, 0.12), transparent 34%),
     #101b1a;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
 }
 
 button,
@@ -48,6 +52,15 @@ select {
 button,
 select {
   color: inherit;
+}
+
+input, 
+textarea, 
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 .dice-workspace {
