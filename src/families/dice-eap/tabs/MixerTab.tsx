@@ -278,7 +278,7 @@ function SourceSelector({ node, router, col, stereo, label, onError }: {
 function channelPeak(input: number | null, gain: number | null, channel: MixerChannel): number | null {
   if (input === null) return null;
   if (channel.pfm) return input;
-  return gain === null ? null : input + gain;
+  return input; // Only apply gain to master peak meter, not individual channel peaks
 }
 
 export function MixerTab({ active, device, node }: { active: boolean; device: DeviceInfo; node: string }) {
