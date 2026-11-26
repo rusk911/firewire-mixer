@@ -10,7 +10,7 @@ function matrix(rows = 2, cols = 2) {
   };
 }
 
-test("pan follows the linear amplitude -6 dB law", () => {
+test("pan follows the linear amplitude -6 dB law on channel only", () => {
   assert.equal(panGain(-1, "left"), 0);
   assert.equal(panGain(-1, "right"), null);
   assert.equal(panGain(1, "left"), null);
@@ -57,12 +57,18 @@ test("matrix priority works when master pan makes one side silent", () => {
   const state = matrix();
   const mixer = createMixerState(state);
   mixer.buses[0].stereo = true;
-  mixer.buses[0].master_pan = 1;
-  mixer.buses[0].channels[0].fader_db = 0;
-  const result = editMatrixGain(mixer, state, 0, 0, -3);
-  assert.ok(result.changes.some((cell) => cell.row === 0 && cell.col === 0 && cell.db === -3));
-  result.mixer.buses[0].master_db = -6;
-  assert.ok(projectBus(result.mixer, 0).some((cell) => cell.row === 0 && cell.col === 0 && cell.db === -9));
+  mixer.buses[0].master_db = 0;
+  mixer.buses[0].channels[0].fader_db = 6;
+  mixer.buses[0].channels[0].pan = 0;
+
+  const centered = projectBus(mixer, 0);
+  assert.ok(Math.abs(centered.find((c) => c.row === 0 && c.col === 0).db - (-0.0206)) < 0.001);
+  assert.ok(Math.abs(centered.find((c) => c.row === 1 && c.col === 0).db - (-0.0206)) < 0.001);
+
+  mixer.buses[0].channels[0].pan = -1;
+  const hardLeft = projectBus(mixer, 0);
+  assert.equal(hardLeft.find((c) => c.row === 0 && c.col === 0).db, 6);
+  assert.equal(hardLeft.find((c) => c.row === 1 && c.col === 0).db, null);
 });
 
 test("linked channels share mute and solo without modifying the next bus", () => {
