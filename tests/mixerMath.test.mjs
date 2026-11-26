@@ -94,7 +94,7 @@ test("initial mixer preserves hardware levels outside visible fader range", () =
   assert.ok(Math.abs(mixer.buses[0].channels[1].compensation_db + 4.1) < 0.0001);
 });
 
-test("stereo channel on stereo bus routes L->L and R->R only", () => {
+test("stereo channel on stereo bus routes L->L and R->R with balance law up to +12 dB", () => {
   const state = matrix(2, 2);
   const mixer = createMixerState(state);
   const [bus0] = mixer.buses;
@@ -103,20 +103,20 @@ test("stereo channel on stereo bus routes L->L and R->R only", () => {
   bus0.stereo = true;
   bus0.master_db = 0;
   ch0.stereo = true;
-  ch0.fader_db = 6;
+  ch0.fader_db = 12;
   ch0.pan = 0;
 
   const centered = projectBus(mixer, 0);
   const cell = (r, c) => centered.find((item) => item.row === r && item.col === c).db;
-  assert.ok(Math.abs(cell(0, 0) - (-0.0206)) < 0.001);
+  assert.equal(cell(0, 0), 12);
   assert.equal(cell(0, 1), null);
   assert.equal(cell(1, 0), null);
-  assert.ok(Math.abs(cell(1, 1) - (-0.0206)) < 0.001);
+  assert.equal(cell(1, 1), 12);
 
   ch0.pan = -1;
   const hardLeft = projectBus(mixer, 0);
   const cellLeft = (r, c) => hardLeft.find((item) => item.row === r && item.col === c).db;
-  assert.equal(cellLeft(0, 0), 6);
+  assert.equal(cellLeft(0, 0), 12);
   assert.equal(cellLeft(0, 1), null);
   assert.equal(cellLeft(1, 0), null);
   assert.equal(cellLeft(1, 1), null);
@@ -127,5 +127,13 @@ test("stereo channel on stereo bus routes L->L and R->R only", () => {
   assert.equal(cellRight(0, 0), null);
   assert.equal(cellRight(0, 1), null);
   assert.equal(cellRight(1, 0), null);
-  assert.equal(cellRight(1, 1), 6);
+  assert.equal(cellRight(1, 1), 12);
+
+  const editState = matrix(2, 2);
+  editState.gains = [[6, null], [null, 0]];
+  const edited = editMatrixGain(mixer, editState, 0, 0, 12);
+  const [editedBus0] = edited.mixer.buses;
+  const [editedCh0] = editedBus0.channels;
+  assert.equal(editedCh0.fader_db, 12);
+  assert.ok(Math.abs(editedCh0.pan - (-0.7488)) < 0.001);
 });

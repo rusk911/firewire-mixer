@@ -360,9 +360,9 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
                   <button type="button" title="Pre-Fader Meter" aria-label={`Pre-Fader Meter ${sourceLabel}`} aria-pressed={channel.pfm}
                     onClick={() => matrixStore.updateChannel(row, col, { pfm: !channel.pfm }, false)}>PFM</button>
                 </div>
-                {stereo ? <PanControl label={`Pan ${sourceLabel}`} value={channel.pan} onChange={(pan) => matrixStore.updateChannel(row, col, { pan })} /> : <div className="strip-pan-spacer" />}
+                {stereo ? <PanControl label={`${linked ? "Balance" : "Pan"} ${sourceLabel}`} value={channel.pan} onChange={(pan) => matrixStore.updateChannel(row, col, { pan })} /> : <div className="strip-pan-spacer" />}
                 <div className="strip-fader-area">
-                  <Fader label={`Fader ${sourceLabel}`} value={channel.fader_db} max={stereo ? 6 : 12}
+                  <Fader label={`Fader ${sourceLabel}`} value={channel.fader_db} max={stereo && !linked ? 6 : 12}
                     onChange={(fader_db) => matrixStore.updateChannel(row, col, { fader_db })} />
                   <PeakMeter levels={levels} label={`Level ${sourceLabel}`} />
                 </div>

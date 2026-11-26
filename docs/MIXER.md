@@ -33,7 +33,7 @@ Each bus displays input channels (`col 0..N-1`, e.g., 18 channels) on the left a
   5. **Vertical Fader + Logarithmic Peak Meter:**
      - **Fader Scale:** Logarithmic visual taper in dB:
        - Mono Bus: `-inf` to **`+12.0 dB`**.
-       - Stereo Bus: `-inf` to **`+6.0 dB`**.
+       - Stereo Bus: `-inf` to **`+6.0 dB`** for mono channels; `-inf` to **`+12.0`** dB for stereo-linked channels.
      - **Fader Modifiers:**
        - `Double-click` -> `0.0 dB`
        - `Shift + Click` -> Max (`+6.0 dB` on Stereo bus, `+12.0 dB` on Mono bus)
