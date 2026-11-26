@@ -362,7 +362,7 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
                 </div>
                 {stereo ? <PanControl label={`${linked ? "Balance" : "Pan"} ${sourceLabel}`} value={channel.pan} onChange={(pan) => matrixStore.updateChannel(row, col, { pan })} /> : <div className="strip-pan-spacer" />}
                 <div className="strip-fader-area">
-                  <Fader label={`Fader ${sourceLabel}`} value={channel.fader_db} max={stereo && !linked ? 6 : 12}
+                  <Fader label={`Fader ${sourceLabel}`} value={channel.fader_db} max={12}
                     onChange={(fader_db) => matrixStore.updateChannel(row, col, { fader_db })} />
                   <PeakMeter levels={levels} label={`Level ${sourceLabel}`} />
                 </div>

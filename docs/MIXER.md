@@ -32,11 +32,10 @@ Each bus displays input channels (`col 0..N-1`, e.g., 18 channels) on the left a
      - **Hover > 1s:** Shows tooltip with exact current pan value.
   5. **Vertical Fader + Logarithmic Peak Meter:**
      - **Fader Scale:** Logarithmic visual taper in dB:
-       - Mono Bus: `-inf` to **`+12.0 dB`**.
-       - Stereo Bus: `-inf` to **`+6.0 dB`** for mono channels; `-inf` to **`+12.0`** dB for stereo-linked channels.
+       - Logarithmic visual taper in dB from -inf to +12.0 dB across all buses and channels (ensuring uniform 0.0 dB alignment across mono and stereo strips).
      - **Fader Modifiers:**
        - `Double-click` -> `0.0 dB`
-       - `Shift + Click` -> Max (`+6.0 dB` on Stereo bus, `+12.0 dB` on Mono bus)
+       - `Shift + Click` -> Max (`+12.0 dB`)
        - `Ctrl + Click` -> `-12.0 dB`
        - `Alt + Click` -> `-inf`
      - **Peak Meter (to the right of the fader):** Logarithmic dB scale, stereo twin bars if channel is stereo-linked, single bar if mono.
@@ -91,6 +90,6 @@ When the user directly turns a knob $\text{Matrix}[row][col]$ to a target hardwa
 1. **Matrix Never Blocked:** `MixerTab` must NEVER block or clamp a change made in `MatrixTab`. (For a stereo channel on a stereo bus, only the diagonal cells $[row_L][col_L]$ and $[row_R][col_R]$ control the channel strip; cross-cells remain $-\infty$).
 2. **Adjust Channel First:** Calculate the channel fader $F$ (and pan/balance $P$ if stereo bus) needed to produce $G_{\text{target}}$ given the current $M_{\text{bus}}$.
 3. **Push Master Fader Only When Channel Hits Ceiling:**
-• If producing $G_{\text{target}}$ requires $F$ to exceed the channel fader ceiling (+12 dB for mono bus, +6 dB for stereo bus) — including when $M_{\text{bus}} = -\infty$ and the user raises a matrix cell from $-\infty$:
+• If producing $G_{\text{target}}$ requires $F$ to exceed the channel fader ceiling (+12 dB) — including when $M_{\text{bus}} = -\infty$ and the user raises a matrix cell from $-\infty$:
 • Automatically raise $M_{\text{bus}}$ (up to 0.0 dB) just enough so that $F$ sits cleanly at its ceiling (+12 dB or +6 dB) while achieving $G_{\text{target}}$ in the hardware matrix.
 • Crucial Invariant for Sibling Channels: When $M_{\text{bus}}$ is pushed upward by a matrix edit on channel $k$, do NOT move the UI faders of other channels ($j \neq k$) on that bus — instead, recalculate and write their hardware matrix cells using their existing fader/pan positions combined with the new $M_{\text{bus}}$ value.

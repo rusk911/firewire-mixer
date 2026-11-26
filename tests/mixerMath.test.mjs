@@ -44,7 +44,7 @@ test("matrix edit raises a muted master without moving sibling faders", () => {
   const result = editMatrixGain(mixer, state, 0, 0, 12);
   const [resBus0] = result.mixer.buses;
   const [resCh0, resCh1] = resBus0.channels;
-  assert.equal(resCh0.fader_db, 6);
+  assert.equal(resCh0.fader_db, 12);
   assert.equal(resCh1.fader_db, -12);
   assert.equal(resBus0.master_db, 0);
   assert.ok(result.changes.some((cell) => cell.row === 0 && cell.col === 0 && Math.abs(cell.db - 12) < 0.001));

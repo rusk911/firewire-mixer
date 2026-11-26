@@ -133,7 +133,7 @@ export function editMatrixGain(
   channel.muted = false;
   if (bus.channels.some((candidate) => candidate.solo) && !channel.solo) channel.solo = true;
   channel.matrix_overrides = [null, null];
-  const limit = stereo && !channelStereo ? 6 : 12;
+  const limit = 12;
   let required: Gain = target;
 
   if (stereo) {

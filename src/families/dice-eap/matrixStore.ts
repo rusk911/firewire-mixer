@@ -240,17 +240,6 @@ export const matrixStore = {
     if (stereo && mixer.buses[row + 1].stereo) return;
     const next = structuredClone(mixer);
     next.buses[row].stereo = stereo;
-    if (stereo) {
-      const channels = next.buses[row].channels;
-      for (let col = 0; col < channels.length; col += 1) {
-        const isLinked = (col > 0 && channels[col - 1]?.stereo) || !!(channels[col].stereo && channels[col + 1]);
-        const channel = channels[col];
-        if (!isLinked && channel.fader_db !== null && channel.fader_db > 6) {
-          channel.compensation_db += channel.fader_db - 6;
-          channel.fader_db = 6;
-        }
-      }
-    }
     if (!stereo) next.buses[row + 1].label = null;
     const changes = projectBus(next, row);
     if (!stereo) changes.push(...projectBus(next, row + 1));
@@ -265,13 +254,7 @@ export const matrixStore = {
     if (!mixer || !matrix || !bus?.channels[col + 1] || bus.channels[col - 1]?.stereo) return;
     if (stereo && bus.channels[col + 1].stereo) return;
     const next = structuredClone(mixer);
-    const channel = next.buses[row].channels[col];
-    channel.stereo = stereo;
-    const busIsStereo = next.buses[row].stereo && !!next.buses[row + 1];
-    if (busIsStereo && !stereo && channel.fader_db !== null && channel.fader_db > 6) {
-      channel.compensation_db += channel.fader_db - 6;
-      channel.fader_db = 6;
-    }
+    next.buses[row].channels[col].stereo = stereo;
     if (!stereo) next.buses[row].channels[col + 1].label = null;
     const changes = next.buses[row].master_db === null ? [] : projectBus(next, row);
     const effective = changes.filter((change) => matrix.gains[change.row]?.[change.col] !== change.db);
