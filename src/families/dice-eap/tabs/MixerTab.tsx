@@ -278,7 +278,7 @@ function SourceSelector({ node, router, col, stereo, label, onError }: {
 function channelPeak(input: number | null, gain: number | null, channel: MixerChannel): number | null {
   if (input === null) return null;
   if (channel.pfm) return input;
-  return input; // Only apply gain to master peak meter, not individual channel peaks
+  return gain === null ? null : input + gain;
 }
 
 export function MixerTab({ active, device, node }: { active: boolean; device: DeviceInfo; node: string }) {
@@ -380,7 +380,7 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
             <button type="button" title="Stereo bus link" aria-pressed={stereo} disabled={row + 1 >= mixer.buses.length || (!stereo && !!mixer.buses[row + 1]?.stereo)}
               onClick={() => matrixStore.setBusStereo(row, !stereo)}>Stereo</button>
           </div>
-          {stereo ? <PanControl label="Master pan" value={bus.master_pan} onChange={(master_pan) => matrixStore.updateBus(row, { master_pan })} /> : <div className="strip-pan-spacer" />}
+          <div className="strip-pan-spacer" />
           <div className="strip-fader-area">
             <Fader label="Master fader" value={bus.master_db} max={0} onChange={(master_db) => matrixStore.updateBus(row, { master_db })} />
             <PeakMeter levels={masterLevels} label="Master level" />

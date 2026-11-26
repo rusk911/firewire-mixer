@@ -102,7 +102,6 @@ export interface MixerBus {
   label: string | null;
   stereo: boolean;
   master_db: number | null;
-  master_pan: number;
   channels: MixerChannel[];
 }
 
