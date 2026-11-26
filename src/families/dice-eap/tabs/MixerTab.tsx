@@ -342,9 +342,14 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
             if (col > 0 && bus.channels[col - 1].stereo) return null;
             const linked = channel.stereo && !!bus.channels[col + 1];
             const sourceLabel = linked ? `${sourceNames[col]} / ${sourceNames[col + 1]}` : sourceNames[col];
-            const levels = (linked ? [col, col + 1] : [col]).map((input) => channelPeak(
-              matrix.input_peaks_db[input] ?? null, matrix.gains[row]?.[input] ?? null, channel,
-            ));
+            const levels = (linked ? [col, col + 1] : [col]).map((input, idx) => {
+              const targetRow = stereo && linked && idx === 1 ? row + 1 : row;
+              return channelPeak(
+                matrix.input_peaks_db[input] ?? null,
+                matrix.gains[targetRow]?.[input] ?? null,
+                channel,
+              );
+            });
             return (
               <article className={`mixer-strip${linked ? " is-stereo" : ""}`} key={col}>
                 <SourceSelector node={node} router={router} col={col} stereo={linked} label={sourceLabel} onError={setRouteError} />
