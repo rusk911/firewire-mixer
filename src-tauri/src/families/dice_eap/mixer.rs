@@ -225,7 +225,7 @@ impl DeviceSnapshot {
 			if bus.master_db.is_some_and(|db| !db.is_finite() || !(-60.0..=0.0).contains(&db))
 				|| bus.channels.iter().enumerate().any(|(channel_index, channel)| {
 					!(-1.0..=1.0).contains(&channel.pan)
-						|| channel.fader_db.is_some_and(|db| !db.is_finite() || !(-60.0..=if bus.stereo { 6.0 } else { 12.0 }).contains(&db))
+						|| channel.fader_db.is_some_and(|db| !db.is_finite() || !(-60.0..=12.0).contains(&db))
 						|| !channel.compensation_db.is_finite()
 						|| channel.matrix_overrides.iter().flatten().any(|db| !db.is_finite())
 						|| (channel.stereo && (channel_index + 1 >= bus.channels.len()

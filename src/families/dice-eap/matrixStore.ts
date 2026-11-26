@@ -240,14 +240,6 @@ export const matrixStore = {
     if (stereo && mixer.buses[row + 1].stereo) return;
     const next = structuredClone(mixer);
     next.buses[row].stereo = stereo;
-    if (stereo) {
-      for (const channel of next.buses[row].channels) {
-        if (channel.fader_db !== null && channel.fader_db > 6) {
-          channel.compensation_db += channel.fader_db - 6;
-          channel.fader_db = 6;
-        }
-      }
-    }
     if (!stereo) next.buses[row + 1].label = null;
     const changes = projectBus(next, row);
     if (!stereo) changes.push(...projectBus(next, row + 1));
