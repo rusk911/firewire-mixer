@@ -31,6 +31,7 @@ export function matrixGain(
   return gain <= -60 ? null : Math.min(12, gain);
 }
 
+
 export function createMixerState(matrix: MatrixState): MixerState {
   return {
     buses: matrix.gains.map((row) => ({
@@ -66,23 +67,37 @@ export function projectBus(mixer: MixerState, row: number): MatrixChange[] {
   if (!bus) return [];
   const anySolo = bus.channels.some((_, index) => logicalChannel(bus, index).solo);
   const changes: MatrixChange[] = [];
+  const busStereo = bus.stereo && !!mixer.buses[root + 1];
+  const sides = busStereo ? 2 : 1;
+
   for (let col = 0; col < bus.channels.length; col += 1) {
     const channel = logicalChannel(bus, col);
+    const channelStereo = col > 0 && bus.channels[col - 1]?.stereo
+      ? true
+      : !!(channel.stereo && bus.channels[col + 1]);
+    const channelSide = col > 0 && bus.channels[col - 1]?.stereo ? 1 : 0;
+
     const muted = channel.muted || (anySolo && !channel.solo);
     const fader = channel.fader_db === null ? null : channel.fader_db + channel.compensation_db;
-    const sides = bus.stereo && mixer.buses[root + 1] ? 2 : 1;
+
     for (let side = 0; side < sides; side += 1) {
-      const direction = sides === 2 ? (side === 0 ? "left" : "right") : undefined;
+      if (busStereo && channelStereo && side !== channelSide) {
+        changes.push({ row: root + side, col, db: null });
+        continue;
+      }
+      const direction = busStereo ? (side === 0 ? "left" : "right") : undefined;
       const calculated = matrixGain(fader, bus.master_db, muted, channel.pan, direction);
       const override = channel.matrix_overrides[side];
       const overridden = override !== null && bus.master_db !== null ? override + bus.master_db : null;
       const db = !muted && fader !== null && overridden !== null
-        ? (overridden <= -60 ? null : Math.min(12, overridden)) : calculated;
+        ? (overridden <= -60 ? null : Math.min(12, overridden))
+        : calculated;
       changes.push({ row: root + side, col, db });
     }
   }
   return changes;
 }
+
 
 export function editMatrixGain(
   mixer: MixerState,
@@ -96,28 +111,40 @@ export function editMatrixGain(
   const root = busRoot(next, row);
   const bus = next.buses[root];
   if (!bus || col < 0 || col >= bus.channels.length) return { mixer: next, changes: [] };
+
   const logicalCol = col > 0 && bus.channels[col - 1]?.stereo ? col - 1 : col;
   const channel = bus.channels[logicalCol];
+  const stereo = bus.stereo && !!next.buses[root + 1];
+  const channelStereo = channel.stereo && !!bus.channels[logicalCol + 1];
+  const side = row - root;
+  const colSide = col - logicalCol;
+
+  if (stereo && channelStereo && side !== colSide) {
+    return { mixer: next, changes: [] };
+  }
+
   channel.muted = false;
   if (bus.channels.some((candidate) => candidate.solo) && !channel.solo) channel.solo = true;
   channel.matrix_overrides = [null, null];
-  const stereo = bus.stereo && !!next.buses[root + 1];
-  const side = row - root;
   const limit = stereo ? 6 : 12;
   let required: Gain = target;
 
   if (stereo) {
-    const values: [Gain, Gain] = [matrix.gains[root]?.[col] ?? null, matrix.gains[root + 1]?.[col] ?? null];
+    const values: [Gain, Gain] = channelStereo
+      ? [matrix.gains[root]?.[logicalCol] ?? null, matrix.gains[root + 1]?.[logicalCol + 1] ?? null]
+      : [matrix.gains[root]?.[logicalCol] ?? null, matrix.gains[root + 1]?.[logicalCol] ?? null];
     values[side] = target;
     const amplitudes = values.map((value) => (value === null ? 0 : 10 ** (value / 20)));
-    const total = amplitudes[0] + amplitudes[1];
+    const [ampLeft, ampRight] = amplitudes;
+    const total = ampLeft + ampRight;
     if (total === 0) {
       required = null;
     } else {
-      channel.pan = (amplitudes[1] - amplitudes[0]) / total;
+      channel.pan = (ampRight - ampLeft) / total;
       required = 20 * Math.log10(total);
     }
   }
+
 
   if (required === null) {
     channel.fader_db = null;
