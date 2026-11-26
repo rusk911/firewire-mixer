@@ -212,9 +212,6 @@ export const matrixStore = {
     if (!mixer || !matrix || !mixer.buses[row]) return;
     const next = structuredClone(mixer);
     Object.assign(next.buses[row], patch);
-    if ("master_pan" in patch) {
-      for (const channel of next.buses[row].channels) channel.matrix_overrides = [null, null];
-    }
     const changes = writeMatrix ? projectBus(next, row) : [];
     const effective = changes.filter((change) => matrix.gains[change.row]?.[change.col] !== change.db);
     publish({ ...snapshot, mixer: next, matrix: applyChanges(matrix, effective) });

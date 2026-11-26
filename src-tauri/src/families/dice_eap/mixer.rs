@@ -146,7 +146,6 @@ pub struct MixerBus {
 	pub label: Option<String>,
 	pub stereo: bool,
 	pub master_db: Option<f32>,
-	pub master_pan: f32,
 	pub channels: Vec<MixerChannel>,
 }
 
@@ -223,8 +222,7 @@ impl DeviceSnapshot {
 			if bus.stereo && (index + 1 >= self.mixer.buses.len() || (index > 0 && self.mixer.buses[index - 1].stereo)) {
 				return Err("Configuration contains overlapping stereo buses".to_owned());
 			}
-			if !(-1.0..=1.0).contains(&bus.master_pan)
-				|| bus.master_db.is_some_and(|db| !db.is_finite() || !(-60.0..=0.0).contains(&db))
+			if bus.master_db.is_some_and(|db| !db.is_finite() || !(-60.0..=0.0).contains(&db))
 				|| bus.channels.iter().enumerate().any(|(channel_index, channel)| {
 					!(-1.0..=1.0).contains(&channel.pan)
 						|| channel.fader_db.is_some_and(|db| !db.is_finite() || !(-60.0..=if bus.stereo { 6.0 } else { 12.0 }).contains(&db))
@@ -387,7 +385,7 @@ mod tests {
 				destination: SavedDestination { block: SavedDestinationBlock::MixerTx0, channel: 0 },
 			}],
 			mixer: MixerState { buses: vec![MixerBus {
-				label: None, stereo: false, master_db: Some(0.0), master_pan: 0.0,
+				label: None, stereo: false, master_db: Some(0.0),
 				channels: vec![MixerChannel {
 					label: None, stereo: false, fader_db: None, pan: 0.0,
 					muted: false, solo: false, pfm: false, compensation_db: 0.0, matrix_overrides: [None, None],
@@ -471,7 +469,7 @@ mod tests {
 		let store = MatrixStore::default();
 		let matrix = store.get_state(&node).expect("matrix state");
 		let mixer = MixerState { buses: matrix.gains.iter().map(|row| MixerBus {
-			label: None, stereo: false, master_db: Some(0.0), master_pan: 0.0,
+			label: None, stereo: false, master_db: Some(0.0),
 			channels: row.iter().map(|gain| MixerChannel {
 				label: None, stereo: false, fader_db: gain.map(|db| db.clamp(-59.9, 12.0)), pan: 0.0,
 				muted: false, solo: false, pfm: false, compensation_db: 0.0, matrix_overrides: [None, None],
