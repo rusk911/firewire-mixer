@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface RotaryCellKnobProps {
@@ -63,6 +63,7 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
   const [editorValue, setEditorValue] = useState("");
   const [editorError, setEditorError] = useState("");
   const editorInput = useRef<HTMLInputElement>(null);
+  const knobRef = useRef<SVGSVGElement>(null);
   const drag = useRef<DragState | null>(null);
   const hoverTimer = useRef<number | undefined>(undefined);
   const wheelCommitTimer = useRef<number | undefined>(undefined);
@@ -81,6 +82,17 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
   useEffect(() => {
     onCommitRef.current = onCommit;
   }, [onCommit]);
+
+  useEffect(() => {
+    const element = knobRef.current;
+    if (!element) return;
+
+    element.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      element.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
 
   useEffect(() => () => {
     if (wheelCommitTimer.current !== undefined) window.clearTimeout(wheelCommitTimer.current);
@@ -172,8 +184,9 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
     }
   }
 
-  function handleWheel(event: React.WheelEvent<SVGSVGElement>) {
+  const handleWheel = useEffectEvent((event: WheelEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     const startDb = pendingWheelValue.current?.db ?? previewDb ?? MIN_DB;
     const next = clampDb(startDb + (event.deltaY < 0 ? 0.5 : -0.5));
     pendingWheelValue.current = { db: next };
@@ -182,7 +195,7 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
     if (wheelCommitTimer.current !== undefined) window.clearTimeout(wheelCommitTimer.current);
     wheelCommitTimer.current = window.setTimeout(flushWheelCommit, WHEEL_COMMIT_DELAY_MS);
     setTooltip({ x: event.clientX, y: event.clientY });
-  }
+  });
 
   function handleContextMenu(event: React.MouseEvent<SVGSVGElement>) {
     event.preventDefault();
@@ -231,6 +244,7 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
   return (
     <div className="rotary-cell">
       <svg
+        ref={knobRef}
         aria-label={`Output ${row + 1}, input ${col + 1}: ${formatDb(previewDb)}`}
         className="rotary-svg"
         onClick={handleClick}
@@ -247,7 +261,6 @@ function RotaryCellKnobView({ row, col, db, inputPeakDb, onChange, onCommit }: R
         }}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
-        onWheel={handleWheel}
         role="slider"
         tabIndex={0}
         viewBox="0 0 48 48"
