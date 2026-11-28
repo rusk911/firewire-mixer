@@ -328,9 +328,39 @@ pub fn read_configuration(node: &str) -> Result<Option<DeviceSnapshot>, String> 
 	Ok(snapshot)
 }
 
+// DICE routers use a rate mode rather than an exact sample rate. Rates within
+// the same mode (for example 44.1/48 kHz or 88.2/96 kHz) have compatible
+// routing layouts and can be restored while an audio stream is active.
+fn sample_rate_mode(rate: u32) -> Option<u8> {
+	match rate {
+		44_100 | 48_000 => Some(1),
+		88_200 | 96_000 => Some(2),
+		_ => None,
+	}
+}
+
+fn sample_rates_compatible(current: u32, saved: u32) -> bool {
+	current == saved || sample_rate_mode(current).is_some_and(|mode| sample_rate_mode(saved) == Some(mode))
+}
+
 fn stream_change_plan(global: &DiceGlobalState, snapshot: &DeviceSnapshot) -> Result<(bool, bool), String> {
 	let change_rate = match snapshot.sample_rate {
-		Some(rate) => super::stream_safe_change(global.sample_rate, Some(rate), global.stream_active, "sample rate")?,
+		Some(saved_rate) if global.stream_active => {
+			// current_rate is the rate actually detected on the active stream;
+			// clock_config.rate may merely be the device's configured rate.
+			let active_rate = global.detected_sample_rate.or(global.sample_rate);
+			if let Some(current_rate) = active_rate {
+				if !sample_rates_compatible(current_rate, saved_rate) {
+					return Err(format!(
+						"Cannot restore configuration: saved sample rate {saved_rate} Hz is incompatible with active stream rate {current_rate} Hz"
+					));
+				}
+			}
+			// Do not try to change the device clock while streaming. The rate
+			// mode is compatible, so mixer/matrix/router restoration can proceed.
+			false
+		},
+		Some(saved_rate) => super::stream_safe_change(global.sample_rate, Some(saved_rate), false, "sample rate")?,
 		None => false,
 	};
 	let change_source = super::stream_safe_change(&global.clock_source, &snapshot.clock_source, global.stream_active, "clock source")?;
@@ -403,14 +433,46 @@ mod tests {
 			detected_sample_rate: Some(48000), clock_locked: true, stream_active: true,
 		};
 		assert_eq!(stream_change_plan(&global, &saved), Ok((false, false)));
-		global.sample_rate = Some(44100);
+		global.sample_rate = Some(96000);
+		global.detected_sample_rate = Some(96000);
 		assert!(stream_change_plan(&global, &saved).expect_err("active rate change").contains("sample rate"));
 		global.sample_rate = Some(48000);
+		global.detected_sample_rate = Some(48000);
 		global.clock_source = "Adat".to_owned();
 		assert!(stream_change_plan(&global, &saved).expect_err("active source change").contains("clock source"));
 		global.stream_active = false;
 		global.sample_rate = Some(44100);
 		assert_eq!(stream_change_plan(&global, &saved), Ok((true, true)));
+	}
+
+	#[test]
+	fn active_stream_allows_sample_rates_within_the_same_dice_rate_mode() {
+		let mut saved = snapshot(); // saved rate: 48 kHz
+		let mut global = DiceGlobalState {
+			node: "/dev/fw1".to_owned(), nickname: "Mixer".to_owned(), clock_sources: vec![],
+			clock_source: "Internal".to_owned(), sample_rates: vec![], sample_rate: Some(48_000),
+			detected_sample_rate: Some(44_100), clock_locked: true, stream_active: true,
+		};
+		assert_eq!(stream_change_plan(&global, &saved), Ok((false, false)));
+		global.detected_sample_rate = Some(96_000);
+		assert!(stream_change_plan(&global, &saved).unwrap_err().contains("incompatible"));
+
+		saved.sample_rate = Some(96_000);
+		global.detected_sample_rate = Some(88_200);
+		assert_eq!(stream_change_plan(&global, &saved), Ok((false, false)));
+		global.detected_sample_rate = Some(48_000);
+		assert!(stream_change_plan(&global, &saved).unwrap_err().contains("incompatible"));
+	}
+
+	#[test]
+	fn active_stream_uses_detected_rate_instead_of_configured_rate() {
+		let saved = snapshot(); // saved rate: 48 kHz
+		let global = DiceGlobalState {
+			node: "/dev/fw1".to_owned(), nickname: "Mixer".to_owned(), clock_sources: vec![],
+			clock_source: "Internal".to_owned(), sample_rates: vec![], sample_rate: Some(96_000),
+			detected_sample_rate: Some(44_100), clock_locked: true, stream_active: true,
+		};
+		assert_eq!(stream_change_plan(&global, &saved), Ok((false, false)));
 	}
 
 	#[test]
