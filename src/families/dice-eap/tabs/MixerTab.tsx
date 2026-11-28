@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import type { DeviceInfo, MixerChannel, RouterPort, RouterState } from "../../../types";
+import type { DeviceInfo, MixerBus, MixerChannel, RouterPort, RouterState } from "../../../types";
+import { balanceGain, panGain } from "../mixerMath";
 import { matrixStore, useMatrixStore } from "../matrixStore";
 
 const MIN_DB = -60;
@@ -26,23 +27,73 @@ function PeakMeter({ levels, label }: { levels: (number | null)[]; label: string
   );
 }
 
-function Fader({ value, max, label, onChange }: {
+function Fader({ value, max, label, onChange, intervalMs = 0 }: {
   value: number | null;
   max: number;
   label: string;
   onChange: (value: number | null) => void;
+  intervalMs?: number;
 }) {
   const rail = useRef<HTMLDivElement>(null);
-  const wheelValue = useRef(value);
+  const latestValue = useRef(value);
   const changeRef = useRef(onChange);
+  const lastEmitAt = useRef(0);
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dragging = useRef(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [displayValue, setDisplayValue] = useState(value);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const tooltipId = useId();
-  const progress = Math.max(0, Math.min(1, ((value ?? MIN_DB) - MIN_DB) / (max - MIN_DB)));
+  const progress = Math.max(0, Math.min(1, ((displayValue ?? MIN_DB) - MIN_DB) / (max - MIN_DB)));
   const ticks = [...new Set([max, 0, -12, -24, -36, -48, MIN_DB])].filter((tick) => tick <= max);
 
-  useEffect(() => { wheelValue.current = value; }, [value]);
   useEffect(() => { changeRef.current = onChange; }, [onChange]);
+  useEffect(() => {
+    if (!dragging.current && !pendingTimer.current) {
+      latestValue.current = value;
+      setDisplayValue(value);
+    }
+  }, [value]);
+
+  function clearPendingTimer() {
+    if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    pendingTimer.current = undefined;
+  }
+
+  function emitLatest() {
+    clearPendingTimer();
+    lastEmitAt.current = Date.now();
+    changeRef.current(latestValue.current);
+  }
+
+  function setFaderValue(next: number | null, immediate = false) {
+    if (!immediate && Object.is(next, latestValue.current)) return;
+    latestValue.current = next;
+    setDisplayValue(next);
+
+    if (intervalMs <= 0) {
+      lastEmitAt.current = Date.now();
+      changeRef.current(next);
+      return;
+    }
+    if (immediate) {
+      emitLatest();
+      return;
+    }
+
+    const remaining = intervalMs - (Date.now() - lastEmitAt.current);
+    if (remaining <= 0 && !pendingTimer.current) {
+      emitLatest();
+    } else if (!pendingTimer.current) {
+      pendingTimer.current = setTimeout(emitLatest, Math.max(0, remaining));
+    }
+  }
+
+  useEffect(() => () => {
+    clearPendingTimer();
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
+
   useEffect(() => {
     const element = rail.current;
     if (!element) return;
@@ -51,18 +102,13 @@ function Fader({ value, max, label, onChange }: {
       event.preventDefault();
       const step = 0.5;
       const next = Math.round(Math.max(MIN_DB, Math.min(max,
-        (wheelValue.current ?? MIN_DB) + (event.deltaY < 0 ? step : -step),
+        (latestValue.current ?? MIN_DB) + (event.deltaY < 0 ? step : -step),
       )) * 10) / 10;
-      const gain = next <= MIN_DB ? null : next;
-      if (gain !== wheelValue.current) {
-        wheelValue.current = gain;
-        changeRef.current(gain);
-      }
+      setFaderValue(next <= MIN_DB ? null : next);
     }
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
-  }, [max]);
-  useEffect(() => () => { if (hoverTimer.current) clearTimeout(hoverTimer.current); }, []);
+  }, [max, intervalMs]);
 
   function clearTooltip() {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
@@ -86,15 +132,16 @@ function Fader({ value, max, label, onChange }: {
     if (!bounds) return;
     const position = Math.max(0, Math.min(1, (bounds.bottom - 15 - event.clientY) / Math.max(1, bounds.height - 30)));
     const next = Math.round((MIN_DB + position * (max - MIN_DB)) * 10) / 10;
-    onChange(next <= MIN_DB ? null : next);
+    setFaderValue(next <= MIN_DB ? null : next);
   }
 
   function modifier(event: React.PointerEvent<HTMLInputElement>) {
     if (event.button !== 0) return;
     clearTooltip();
     event.preventDefault();
+    dragging.current = true;
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-      onChange(event.altKey ? null : event.ctrlKey || event.metaKey ? -12 : max);
+      setFaderValue(event.altKey ? null : event.ctrlKey || event.metaKey ? -12 : max, true);
     } else {
       event.currentTarget.focus();
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -116,16 +163,16 @@ function Fader({ value, max, label, onChange }: {
       <input
         aria-label={label}
         aria-describedby={tooltip ? tooltipId : undefined}
-        aria-valuetext={value === null ? "minus infinity" : `${value.toFixed(1)} dB`}
+        aria-valuetext={displayValue === null ? "minus infinity" : `${displayValue.toFixed(1)} dB`}
         className="strip-fader-input"
         type="range"
         min={MIN_DB}
         max={max}
         step={0.1}
-        value={value ?? MIN_DB}
+        value={displayValue ?? MIN_DB}
         onChange={(event) => {
           const next = Number(event.currentTarget.value);
-          onChange(next <= MIN_DB ? null : next);
+          setFaderValue(next <= MIN_DB ? null : next);
         }}
         onPointerDown={modifier}
         onPointerEnter={queueTooltip}
@@ -136,17 +183,23 @@ function Fader({ value, max, label, onChange }: {
         }}
         onPointerUp={(event) => {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          if (intervalMs > 0) emitLatest();
+          dragging.current = false;
           queueTooltip(event);
         }}
-        onPointerCancel={clearTooltip}
-        onDoubleClick={(event) => { event.preventDefault(); onChange(0); }}
+        onPointerCancel={() => {
+          if (intervalMs > 0) emitLatest();
+          dragging.current = false;
+          clearTooltip();
+        }}
+        onDoubleClick={(event) => { event.preventDefault(); setFaderValue(0, true); }}
       />
       {tooltip && createPortal(
         <div id={tooltipId} className="rotary-tooltip" role="tooltip" style={{
           left: Math.max(8, Math.min(tooltip.x + 12, window.innerWidth - 214)),
           top: Math.max(8, Math.min(tooltip.y + 12, window.innerHeight - 145)),
         }}>
-          <strong>{displayDb(value)} dB</strong>
+          <strong>{displayDb(displayValue)} dB</strong>
           <span>Double-click: 0 dB</span>
           <span>Shift + click: {max > 0 ? "+" : ""}{max} dB</span>
           <span>Ctrl + click: −12 dB</span>
@@ -275,10 +328,30 @@ function SourceSelector({ node, router, col, stereo, label, onError }: {
   );
 }
 
-function channelPeak(input: number | null, gain: number | null, channel: MixerChannel): number | null {
+function channelPeak(
+  input: number | null,
+  channel: MixerChannel,
+  bus: MixerBus,
+  col: number,
+  side: number,
+): number | null {
   if (input === null) return null;
   if (channel.pfm) return input;
-  return gain === null ? null : input + gain;
+
+  // Channel meters are pre-master: the master fader only affects the master meter.
+  const anySolo = bus.channels.some((candidate) => candidate.solo);
+  if (channel.muted || (anySolo && !channel.solo) || channel.fader_db === null) return null;
+
+  const override = channel.matrix_overrides[side];
+  let gain = override ?? channel.fader_db + channel.compensation_db;
+  if (override === null && bus.stereo) {
+    const linked = channel.stereo && !!bus.channels[col + 1];
+    const direction = side === 0 ? "left" : "right";
+    const pan = linked ? balanceGain(channel.pan, direction) : panGain(channel.pan, direction);
+    if (pan === null) return null;
+    gain += pan;
+  }
+  return input + gain;
 }
 
 export function MixerTab({ active, device, node }: { active: boolean; device: DeviceInfo; node: string }) {
@@ -349,8 +422,10 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
               const targetRow = stereo && linked && idx === 1 ? row + 1 : row;
               return channelPeak(
                 matrixStore.getInputPeak(input),
-                matrix.gains[targetRow]?.[input] ?? null,
                 channel,
+                bus,
+                col,
+                targetRow - row,
               );
             });
             return (
@@ -390,7 +465,7 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
           </div>
           <div className="strip-pan-spacer" />
           <div className="strip-fader-area">
-            <Fader label="Master fader" value={bus.master_db} max={6} onChange={(master_db) => matrixStore.updateBus(row, { master_db })} />
+            <Fader label="Master fader" value={bus.master_db} max={6} intervalMs={100} onChange={(master_db) => matrixStore.updateBus(row, { master_db })} />
             <PeakMeter levels={masterLevels} label="Master level" />
           </div>
           <output className="strip-value">{displayDb(bus.master_db)}</output>
