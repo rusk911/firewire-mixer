@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
-import type { BusStripProjection, DestinationPeak, MatrixState, MixerBus, MixerChannel, MixerState, RouterRoute, RouterRoutesSnapshot, RouterState } from "../../types";
+import type { BusStripProjection, DestinationPeak, MatrixState, MixerBus, MixerChannel, MixerState, RouterRoutesSnapshot, RouterState } from "../../types";
 import { createMixerState, editMatrixGain, projectBus, type MatrixChange } from "./mixerMath";
 
 export interface MatrixSnapshot {
