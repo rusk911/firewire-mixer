@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
-import type { BusStripProjection, DestinationPeak, MatrixState, MixerBus, MixerChannel, MixerState, RouterState } from "../../types";
+import type { BusStripProjection, DestinationPeak, MatrixState, MixerBus, MixerChannel, MixerState, RouterRoute, RouterRoutesSnapshot, RouterState } from "../../types";
 import { createMixerState, editMatrixGain, projectBus, type MatrixChange } from "./mixerMath";
 
 export interface MatrixSnapshot {
@@ -14,8 +14,38 @@ export interface MatrixSnapshot {
 
 let snapshot: MatrixSnapshot = { matrix: null, busStrips: [], routerState: null, mixer: null, mixerLoaded: false, mixerError: "" };
 const listeners = new Set<() => void>();
+const routerStateListeners = new Set<() => void>();
+const destinationRouteValues = new Map<string, string | null>();
+const destinationRouteListeners = new Map<string, Set<() => void>>();
+const routerRouteCountListeners = new Set<() => void>();
+let routerRouteCount = 0;
+const inputPeakValues = new Map<number, number | null>();
+const destinationPeakValues = new Map<string, number | null>();
+const destinationSignalValues = new Map<string, boolean>();
+const meterListeners = new Set<() => void>();
+let meterRevision = 0;
+let meterNode: string | null = null;
+const inputPeakListeners = new Map<number, Set<() => void>>();
+const destinationSignalListeners = new Map<string, Set<() => void>>();
+
+function subscribeTo<K>(subscriptions: Map<K, Set<() => void>>, key: K, listener: () => void): () => void {
+  let keyListeners = subscriptions.get(key);
+  if (!keyListeners) {
+    keyListeners = new Set();
+    subscriptions.set(key, keyListeners);
+  }
+  keyListeners.add(listener);
+  return () => {
+    keyListeners?.delete(listener);
+    if (keyListeners?.size === 0) subscriptions.delete(key);
+  };
+}
+
+function notify<K>(subscriptions: Map<K, Set<() => void>>, key: K) {
+  subscriptions.get(key)?.forEach((listener) => listener());
+}
 const portLabels = new Map<string, { rows: string[]; columns: string[] }>();
-const MIN_PEAK_UI_INTERVAL_MS = 50;
+const MIN_PEAK_UI_INTERVAL_MS = 100;
 let lastPeakUiUpdate = 0;
 const pendingWrites = new Map<string, MatrixChange>();
 const previewWrites = new Map<string, MatrixChange>();
@@ -158,12 +188,63 @@ export const matrixStore = {
     return snapshot;
   },
 
+  getRouterState(): RouterState | null {
+    return snapshot.routerState;
+  },
+
+  subscribeRouterState(listener: () => void): () => void {
+    routerStateListeners.add(listener);
+    return () => routerStateListeners.delete(listener);
+  },
+
   getGain(row: number, col: number): number | null {
     return snapshot.matrix?.gains[row]?.[col] ?? null;
   },
 
   getInputPeak(col: number): number | null {
-    return snapshot.matrix?.input_peaks_db[col] ?? null;
+    return inputPeakValues.get(col) ?? null;
+  },
+
+  getMeterRevision(): number {
+    return meterRevision;
+  },
+
+  subscribeMeters(listener: () => void): () => void {
+    meterListeners.add(listener);
+    return () => meterListeners.delete(listener);
+  },
+
+  subscribeInputPeak(col: number, listener: () => void): () => void {
+    return subscribeTo(inputPeakListeners, col, listener);
+  },
+
+  getDestinationPeak(portId: string): number | null {
+    return destinationPeakValues.get(portId) ?? null;
+  },
+
+  getDestinationRoute(portId: string): string | null {
+    return destinationRouteValues.get(portId) ?? null;
+  },
+
+  subscribeDestinationRoute(portId: string, listener: () => void): () => void {
+    return subscribeTo(destinationRouteListeners, portId, listener);
+  },
+
+  getRouterRouteCount(): number {
+    return routerRouteCount;
+  },
+
+  subscribeRouterRouteCount(listener: () => void): () => void {
+    routerRouteCountListeners.add(listener);
+    return () => routerRouteCountListeners.delete(listener);
+  },
+
+  getDestinationSignal(portId: string): boolean {
+    return destinationSignalValues.get(portId) ?? false;
+  },
+
+  subscribeDestinationSignal(portId: string, listener: () => void): () => void {
+    return subscribeTo(destinationSignalListeners, portId, listener);
   },
 
   subscribe(listener: () => void): () => void {
@@ -172,6 +253,15 @@ export const matrixStore = {
   },
 
   setMatrix(matrix: MatrixState): void {
+    if (meterNode !== matrix.node) {
+      meterNode = matrix.node;
+      inputPeakValues.clear();
+      destinationPeakValues.clear();
+      destinationSignalValues.clear();
+    }
+    matrix.input_peaks_db.forEach((peak, col) => {
+      if (!inputPeakValues.has(col)) inputPeakValues.set(col, peak);
+    });
     const current = snapshot.matrix;
     const labels = portLabels.get(matrix.node);
     let nextMatrix = current?.node === matrix.node
@@ -291,6 +381,27 @@ export const matrixStore = {
     publish({ ...snapshot, matrix, busStrips: projectBusStrips(matrix, snapshot.busStrips) });
   },
 
+  setRouterRoutes(node: string, update: RouterRoutesSnapshot): boolean {
+    const routerState = snapshot.routerState;
+    if (!routerState || routerState.node !== node) return false;
+    if (routerState.sample_rate !== update.sample_rate) return true;
+    let routeCountChanged = false;
+    for (const route of update.routes) {
+      if (!destinationRouteValues.has(route.destination_id)) continue;
+      const previousSource = destinationRouteValues.get(route.destination_id);
+      if (previousSource === route.source_id) continue;
+      if (previousSource !== null && previousSource !== undefined) routerRouteCount -= 1;
+      if (route.source_id !== null) routerRouteCount += 1;
+      destinationRouteValues.set(route.destination_id, route.source_id);
+      const destination = routerState.destinations.find((item) => item.port.id === route.destination_id);
+      if (destination) destination.source_id = route.source_id;
+      notify(destinationRouteListeners, route.destination_id);
+      routeCountChanged = true;
+    }
+    if (routeCountChanged) routerRouteCountListeners.forEach((listener) => listener());
+    return false;
+  },
+
   setRouterState(routerState: RouterState): void {
     portLabels.set(routerState.node, {
       rows: routerState.matrix_row_labels,
@@ -307,37 +418,98 @@ export const matrixStore = {
           column_labels: routerState.matrix_column_labels,
         }
       : current;
+    const previous = snapshot.routerState;
+    const sameTopology = previous !== null
+      && previous.node === routerState.node
+      && previous.sources.length === routerState.sources.length
+      && previous.destinations.length === routerState.destinations.length
+      && previous.sources.every((port, index) => {
+        const next = routerState.sources[index];
+        return port.id === next.id && port.label === next.label && port.group === next.group
+          && port.stereo_partner_id === next.stereo_partner_id;
+      })
+      && previous.destinations.every((destination, index) => {
+        const next = routerState.destinations[index];
+        return destination.port.id === next.port.id
+          && destination.port.label === next.port.label
+          && destination.port.group === next.port.group
+          && destination.port.stereo_partner_id === next.port.stereo_partner_id;
+      })
+      && previous.matrix_row_labels.length === routerState.matrix_row_labels.length
+      && previous.matrix_row_labels.every((label, index) => label === routerState.matrix_row_labels[index])
+      && previous.matrix_column_labels.length === routerState.matrix_column_labels.length
+      && previous.matrix_column_labels.every((label, index) => label === routerState.matrix_column_labels[index])
+      && previous.matrix_input_port_ids.length === routerState.matrix_input_port_ids.length
+      && previous.matrix_input_port_ids.every((id, index) => id === routerState.matrix_input_port_ids[index])
+      && previous.matrix_output_port_ids.length === routerState.matrix_output_port_ids.length
+      && previous.matrix_output_port_ids.every((id, index) => id === routerState.matrix_output_port_ids[index]);
+
+    if (!sameTopology) {
+      destinationRouteValues.clear();
+      routerRouteCount = 0;
+    }
+    let routeCountChanged = !sameTopology;
+    for (const destination of routerState.destinations) {
+      const previousSource = destinationRouteValues.get(destination.port.id);
+      if (previousSource !== destination.source_id) {
+        if (previousSource !== undefined && previousSource !== null) routerRouteCount -= 1;
+        if (destination.source_id !== null) routerRouteCount += 1;
+        destinationRouteValues.set(destination.port.id, destination.source_id);
+        notify(destinationRouteListeners, destination.port.id);
+        routeCountChanged = true;
+      }
+    }
+    if (routeCountChanged) routerRouteCountListeners.forEach((listener) => listener());
+
+    if (sameTopology && previous) {
+      // Update only route values; keep the topology arrays and objects stable.
+      routerState.destinations.forEach((destination, index) => {
+        previous.destinations[index].source_id = destination.source_id;
+      });
+      return;
+    }
+
     publish({ ...snapshot, matrix, routerState });
+    routerStateListeners.forEach((listener) => listener());
   },
 
   setMeters(node: string, inputPeaks: (number | null)[], destinationPeaks: DestinationPeak[], force = false): void {
-    const current = snapshot.matrix;
-    const router = snapshot.routerState;
-    const updatesMatrix = current?.node === node;
-    const updatesRouter = router?.node === node;
+    const updatesMatrix = snapshot.matrix?.node === node;
+    const updatesRouter = snapshot.routerState?.node === node;
     if (!updatesMatrix && !updatesRouter) return;
-
-    const matrixUnchanged = !updatesMatrix || (inputPeaks.length === current.input_peaks_db.length
-      && inputPeaks.every((peak, index) => peak === current.input_peaks_db[index]));
-    const peakByPort = new Map(destinationPeaks.map((peak) => [peak.port_id, peak.peak_db]));
-    const routerUnchanged = !updatesRouter || router.destinations.every((destination) =>
-      (peakByPort.get(destination.port.id) ?? null) === destination.peak_db,
-    );
-    if (matrixUnchanged && routerUnchanged) return;
     if (!force && Date.now() - lastPeakUiUpdate < MIN_PEAK_UI_INTERVAL_MS) return;
 
     lastPeakUiUpdate = Date.now();
-    const nextMatrix = updatesMatrix ? { ...current, input_peaks_db: inputPeaks } : current;
-    const nextRouter = updatesRouter
-      ? {
-          ...router,
-          destinations: router.destinations.map((destination) => ({
-            ...destination,
-            peak_db: peakByPort.get(destination.port.id) ?? null,
-          })),
+    let changed = false;
+
+    if (updatesMatrix) {
+      inputPeaks.forEach((peak, col) => {
+        if (inputPeakValues.get(col) !== peak) {
+          inputPeakValues.set(col, peak);
+          notify(inputPeakListeners, col);
+          changed = true;
         }
-      : router;
-    publish({ ...snapshot, matrix: nextMatrix, routerState: nextRouter });
+      });
+    }
+
+    if (updatesRouter) {
+      destinationPeaks.forEach(({ port_id, peak_db }) => {
+        if (destinationPeakValues.get(port_id) !== peak_db) {
+          destinationPeakValues.set(port_id, peak_db);
+          changed = true;
+        }
+        const hasSignal = peak_db !== null;
+        if (destinationSignalValues.get(port_id) !== hasSignal) {
+          destinationSignalValues.set(port_id, hasSignal);
+          notify(destinationSignalListeners, port_id);
+        }
+      });
+    }
+
+    if (changed) {
+      meterRevision += 1;
+      meterListeners.forEach((listener) => listener());
+    }
   },
 
   setSolo(pair: number, solo: boolean): void {

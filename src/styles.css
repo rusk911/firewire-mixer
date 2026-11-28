@@ -661,22 +661,24 @@ textarea,
 
 .router-meter-fill {
   display: block;
-  width: var(--peak-width);
+  width: 100%;
   height: 100%;
-  transition: width 90ms linear;
+  background: transparent;
+  box-shadow: 0 0 0 rgba(112, 191, 145, 0);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
-.router-meter-fill.is-quiet,
-.router-meter-fill.is-green {
+.router-meter-fill.is-active {
   background: #70bf91;
+  box-shadow: 0 0 7px rgba(112, 191, 145, 0.42);
 }
 
-.router-meter-fill.is-yellow {
-  background: #e0b84c;
-}
-
-.router-meter-fill.is-red {
-  background: #df6955;
+@media (prefers-reduced-motion: reduce) {
+  .router-meter-fill {
+    transition: none;
+  }
 }
 
 .router-source-select {

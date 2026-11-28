@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { DeviceInfo, MixerChannel, RouterPort, RouterState } from "../../../types";
 import { matrixStore, useMatrixStore } from "../matrixStore";
@@ -282,6 +282,7 @@ function channelPeak(input: number | null, gain: number | null, channel: MixerCh
 }
 
 export function MixerTab({ active, device, node }: { active: boolean; device: DeviceInfo; node: string }) {
+  useSyncExternalStore(matrixStore.subscribeMeters, matrixStore.getMeterRevision, matrixStore.getMeterRevision);
   const { matrix, mixer, mixerLoaded, mixerError, routerState } = useMatrixStore();
   const [selectedRow, setSelectedRow] = useState(0);
   const [routeError, setRouteError] = useState("");
@@ -315,8 +316,10 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
   });
   const masterLevels = (stereo ? [row, row + 1] : [row]).map((output) => {
     const sourceId = router?.matrix_output_port_ids[output];
-    const peaks = router?.destinations.filter((destination) => destination.source_id === sourceId)
-      .map((destination) => destination.peak_db).filter((value): value is number => value !== null) ?? [];
+    const peaks = router?.destinations
+      .filter((destination) => destination.source_id === sourceId)
+      .map((destination) => matrixStore.getDestinationPeak(destination.port.id))
+      .filter((value): value is number => value !== null) ?? [];
     return peaks.length && bus.master_db !== null ? Math.max(...peaks) + bus.master_db : null;
   });
 
@@ -345,7 +348,7 @@ export function MixerTab({ active, device, node }: { active: boolean; device: De
             const levels = (linked ? [col, col + 1] : [col]).map((input, idx) => {
               const targetRow = stereo && linked && idx === 1 ? row + 1 : row;
               return channelPeak(
-                matrix.input_peaks_db[input] ?? null,
+                matrixStore.getInputPeak(input),
                 matrix.gains[targetRow]?.[input] ?? null,
                 channel,
               );

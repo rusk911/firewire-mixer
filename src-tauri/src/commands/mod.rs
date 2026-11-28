@@ -104,6 +104,17 @@ pub async fn get_router_state(node: String) -> Result<RouterState, String> {
 }
 
 #[tauri::command]
+pub async fn get_router_routes(
+    router_lock: State<'_, Arc<tokio::sync::Mutex<()>>>,
+    node: String,
+) -> Result<router::RouterRoutesSnapshot, String> {
+    let _guard = router_lock.lock().await;
+    tauri::async_runtime::spawn_blocking(move || router::get_router_routes(&node))
+        .await
+        .map_err(|error| format!("Router route refresh task failed: {error}"))?
+}
+
+#[tauri::command]
 pub async fn set_route(
     router_lock: State<'_, Arc<tokio::sync::Mutex<()>>>,
     node: String,

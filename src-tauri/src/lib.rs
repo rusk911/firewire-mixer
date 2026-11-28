@@ -14,6 +14,7 @@ pub fn register_commands<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri
         commands::set_matrix_cell,
         commands::set_matrix_cells,
         commands::get_router_state,
+        commands::get_router_routes,
         commands::set_route,
         commands::get_saved_mixer_state,
         commands::save_mixer_configuration,
