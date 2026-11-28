@@ -49,12 +49,12 @@ export function createMixerState(matrix: MatrixState): MixerState {
       channels: row.map((gain) => ({
         label: null,
         stereo: false,
-        fader_db: gain === null ? null : Math.max(-59.9, Math.min(12, gain)),
+        fader_db: gain === null ? null : Math.max(-59.9, Math.min(6, gain)),
         pan: 0,
         muted: false,
         solo: false,
         pfm: false,
-        compensation_db: gain === null ? 0 : gain - Math.max(-59.9, Math.min(12, gain)),
+        compensation_db: gain === null ? 0 : gain - Math.max(-59.9, Math.min(6, gain)),
         matrix_overrides: [null, null],
       })),
     })),
@@ -133,7 +133,7 @@ export function editMatrixGain(
   channel.muted = false;
   if (bus.channels.some((candidate) => candidate.solo) && !channel.solo) channel.solo = true;
   channel.matrix_overrides = [null, null];
-  const limit = 12;
+  const limit = 6;
   let required: Gain = target;
 
   if (stereo) {
@@ -167,10 +167,10 @@ export function editMatrixGain(
     channel.fader_db = null;
     channel.compensation_db = 0;
   } else {
-    if (bus.master_db === null) bus.master_db = Math.min(0, required - limit);
+    if (bus.master_db === null) bus.master_db = 0;
     let needed = required - bus.master_db;
-    if (needed > limit && bus.master_db < 0) {
-      bus.master_db = Math.min(0, bus.master_db + needed - limit);
+    if (needed > limit) {
+      bus.master_db = Math.min(6, bus.master_db + needed - limit);
       needed = required - bus.master_db;
     }
     channel.fader_db = Math.max(-59.9, Math.min(limit, needed));
