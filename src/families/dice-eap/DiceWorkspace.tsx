@@ -6,7 +6,7 @@ import { MixerTab } from "./tabs/MixerTab";
 import { MatrixTab } from "./tabs/MatrixTab";
 import { RouterTab } from "./tabs/RouterTab";
 import { SettingsTab } from "./tabs/SettingsTab";
-import type { MeterUpdate, WorkspaceProps } from "../../types";
+import type { MatrixState, MeterUpdate, WorkspaceProps } from "../../types";
 import { matrixStore } from "./matrixStore";
 
 const tabs = ["Mixer", "Matrix", "Router", "Settings"] as const;
@@ -23,6 +23,7 @@ export function DiceWorkspace({
   const [activeTab, setActiveTab] = useState<Tab>("Mixer");
   const [error, setError] = useState("");
   const [meterError, setMeterError] = useState("");
+  const [meterListenerNode, setMeterListenerNode] = useState<string | null>(null);
   const meterCommands = useRef<Promise<void>>(Promise.resolve());
   const metersActive = activeTab === "Mixer" || activeTab === "Matrix" || activeTab === "Router";
 
@@ -30,12 +31,19 @@ export function DiceWorkspace({
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<MeterUpdate>("meter-update", ({ payload }) => {
-      if (payload.node === node) setMeterError(payload.error ?? "");
+      if (payload.node !== node) return;
+      setMeterError(payload.error ?? "");
+      matrixStore.setMeters(node, payload.input_peaks_db, payload.destination_peaks, payload.error !== null);
     }).then((stopListening) => {
       if (disposed) stopListening();
-      else unlisten = stopListening;
+      else {
+        unlisten = stopListening;
+        setMeterListenerNode(node);
+      }
     }).catch((reason: unknown) => {
-      if (!disposed) setMeterError(reason instanceof Error ? reason.message : String(reason));
+      if (!disposed) {
+        setMeterError(reason instanceof Error ? reason.message : String(reason));
+      }
     });
     return () => {
       disposed = true;
@@ -44,7 +52,21 @@ export function DiceWorkspace({
   }, [node]);
 
   useEffect(() => {
-    if (!metersActive) return;
+    let disposed = false;
+    void invoke<MatrixState>("get_matrix_state", { node })
+      .then((state) => {
+        if (disposed) return;
+        matrixStore.setMatrix(state);
+        void matrixStore.loadMixer(node);
+      })
+      .catch((reason: unknown) => {
+        if (!disposed) setError(reason instanceof Error ? reason.message : String(reason));
+      });
+    return () => { disposed = true; };
+  }, [node]);
+
+  useEffect(() => {
+    if (!metersActive || meterListenerNode !== node) return;
     meterCommands.current = meterCommands.current.then(() => invoke<void>("start_meter_polling", { node }))
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -55,7 +77,7 @@ export function DiceWorkspace({
           setError(reason instanceof Error ? reason.message : String(reason));
         });
     };
-  }, [metersActive, node]);
+  }, [metersActive, meterListenerNode, node]);
 
   async function safelyUpdate<T>(operation: ((value: T) => Promise<unknown>) | undefined, value: T) {
     if (!operation || value === undefined) return;
@@ -99,18 +121,26 @@ export function DiceWorkspace({
         {!error && metersActive && meterError && (
           <div className="workspace-error" role="alert">Meter polling: {meterError}</div>
         )}
-        <div className="workspace-pane" hidden={activeTab !== "Mixer"}>
-          <MixerTab active={activeTab === "Mixer"} device={device} node={node} />
-        </div>
-        <div className="workspace-pane" hidden={activeTab !== "Matrix"}>
-          <MatrixTab device={device} node={node} />
-        </div>
-        <div className="workspace-pane" hidden={activeTab !== "Router"}>
-          <RouterTab active={activeTab === "Router"} device={device} node={node} />
-        </div>
-        <div className="workspace-pane" hidden={activeTab !== "Settings"}>
-          <SettingsTab device={device} node={node} />
-        </div>
+        {activeTab === "Mixer" && (
+          <div className="workspace-pane">
+            <MixerTab active device={device} node={node} />
+          </div>
+        )}
+        {activeTab === "Matrix" && (
+          <div className="workspace-pane">
+            <MatrixTab device={device} node={node} />
+          </div>
+        )}
+        {activeTab === "Router" && (
+          <div className="workspace-pane">
+            <RouterTab active device={device} node={node} />
+          </div>
+        )}
+        {activeTab === "Settings" && (
+          <div className="workspace-pane">
+            <SettingsTab device={device} node={node} />
+          </div>
+        )}
       </main>
     </div>
   );

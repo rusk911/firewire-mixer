@@ -52,7 +52,7 @@ function MatrixCell({
     () => matrixStore.getGain(row, col),
   );
   const inputPeakDb = useSyncExternalStore(
-    matrixStore.subscribe,
+    (listener) => matrixStore.subscribeInputPeak(col, listener),
     () => matrixStore.getInputPeak(col),
     () => matrixStore.getInputPeak(col),
   );

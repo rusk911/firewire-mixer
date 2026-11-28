@@ -31,7 +31,7 @@ const TRANSACTION_TIMEOUT_MS: u32 = 200;
 const COEFFICIENT_UNITY: f64 = 16_384.0;
 const MIN_EDITABLE_DB: f32 = -60.0;
 const MAX_EDITABLE_DB: f32 = 12.0;
-const METER_INTERVAL: Duration = Duration::from_millis(40);
+const METER_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct MatrixState {
@@ -320,10 +320,13 @@ impl MatrixStore {
                         last_error = None;
                         emitter(MeterUpdate {
                             node: node_path.clone(),
-                            input_peaks_db: peak_values(&peaks, &cached.mixer_inputs),
+                            input_peaks_db: peak_values(&peaks, &cached.mixer_inputs)
+                                .into_iter()
+                                .map(round_meter_db)
+                                .collect(),
                             destination_peaks: peaks.0.0.iter().map(|entry| DestinationPeak {
                                 port_id: destination_port_id(entry.dst),
-                                peak_db: peak_to_db(entry.peak),
+                                peak_db: round_meter_db(peak_to_db(entry.peak)),
                             }).collect(),
                             error: None,
                         });
@@ -583,6 +586,10 @@ fn read_peak_entries_for<P: MatrixProtocol>(
     )
     .map_err(|error| format!("Failed to read DICE peak meters: {error}"))?;
     Ok(peaks)
+}
+
+fn round_meter_db(value: Option<f32>) -> Option<f32> {
+    value.map(f32::round)
 }
 
 fn peak_values(peaks: &PeakParams, destinations: &[DstBlk]) -> Vec<Option<f32>> {

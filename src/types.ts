@@ -65,11 +65,21 @@ export interface RouterPort {
 export interface RouterDestination {
   port: RouterPort;
   source_id: string | null;
-  peak_db: number | null;
+}
+
+export interface RouterRoute {
+  destination_id: string;
+  source_id: string | null;
+}
+
+export interface RouterRoutesSnapshot {
+  sample_rate: number;
+  routes: RouterRoute[];
 }
 
 export interface RouterState {
   node: string;
+  sample_rate: number;
   sources: RouterPort[];
   destinations: RouterDestination[];
   matrix_row_labels: string[];

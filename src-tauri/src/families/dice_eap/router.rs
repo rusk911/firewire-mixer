@@ -8,7 +8,6 @@ use firewire_dice_protocols::tcat::extension::{
 	cmd_section::{Opcode, RateMode},
 	current_config_section::{CurrentRouterParams, CurrentStreamFormatParams},
 	FormatEntry,
-	peak_section::PeakParams,
 	ExtensionSections, RouterEntry, RouterParams, SrcBlk, SrcBlkId, DstBlk, DstBlkId,
 	TcatExtensionOperation, TcatExtensionSectionParamsOperation,
 };
@@ -36,12 +35,24 @@ pub struct RouterPort {
 pub struct RouterDestination {
 	pub port: RouterPort,
 	pub source_id: Option<String>,
-	pub peak_db: Option<f32>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct RouterRoute {
+	pub destination_id: String,
+	pub source_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct RouterRoutesSnapshot {
+	pub sample_rate: u32,
+	pub routes: Vec<RouterRoute>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct RouterState {
 	pub node: String,
+	pub sample_rate: u32,
 	pub sources: Vec<RouterPort>,
 	pub destinations: Vec<RouterDestination>,
 	pub matrix_row_labels: Vec<String>,
@@ -56,7 +67,6 @@ trait RouterProtocol:
 	+ TcatExtensionCapsSectionOperation
 	+ TcatExtensionSectionParamsOperation<CurrentRouterParams>
 	+ TcatExtensionSectionParamsOperation<CurrentStreamFormatParams>
-	+ TcatExtensionSectionParamsOperation<PeakParams>
 {
 }
 
@@ -66,8 +76,7 @@ impl<T> RouterProtocol for T where
 		+ TcatExtensionCapsSectionOperation
 		+ TcatExtensionSectionParamsOperation<CurrentRouterParams>
 		+ TcatExtensionSectionParamsOperation<CurrentStreamFormatParams>
-		+ TcatExtensionSectionParamsOperation<PeakParams>
-{
+	{
 }
 
 struct RouterSnapshot {
@@ -81,6 +90,44 @@ struct RouterSnapshot {
 
 pub fn get_router_state(node_path: &str) -> Result<RouterState, String> {
 	read_router_snapshot(node_path).map(|snapshot| snapshot.state)
+}
+
+pub fn get_router_routes(node_path: &str) -> Result<RouterRoutesSnapshot, String> {
+	let device = discovery::device_info_for_path(node_path)?;
+	let protocol = device_protocol(&device)?;
+	let transport = DiceTransport::open(node_path)?;
+	match protocol {
+		crate::families::dice_eap::matrix::ProtocolKind::SaffirePro26 => read_router_routes_for::<SPro26Protocol>(&device, &transport),
+		crate::families::dice_eap::matrix::ProtocolKind::SaffirePro40 => read_router_routes_for::<SPro40Protocol>(&device, &transport),
+		crate::families::dice_eap::matrix::ProtocolKind::ProFire2626 => read_router_routes_for::<Pfire2626Protocol>(&device, &transport),
+		crate::families::dice_eap::matrix::ProtocolKind::FireStudioMobile => read_router_routes_for::<FStudioMobileProtocol>(&device, &transport),
+	}
+}
+
+fn read_router_routes_for<P: RouterProtocol>(device: &DeviceInfo, transport: &DiceTransport) -> Result<RouterRoutesSnapshot, String> {
+	let (_, global) = transport.read_global_section()?;
+	let rate_mode = RateMode::from_sampling_transfer_frequency(global.current_rate);
+	let mut sections = ExtensionSections::default();
+	P::read_extension_sections(transport.request(), transport.node(), &mut sections, ROUTER_TIMEOUT_MS)
+		.map_err(|error| format!("Failed to read DICE extension sections: {error}"))?;
+	let mut caps = ExtensionCaps::default();
+	P::read_extension_caps(transport.request(), transport.node(), &sections, &mut caps, ROUTER_TIMEOUT_MS)
+		.map_err(|error| format!("Failed to read DICE capabilities: {error}"))?;
+	if !caps.router.is_exposed {
+		return Err(format!("{} does not expose a DICE router", device.name));
+	}
+	let mut available = Tcd22xxAvailableBlocks::default();
+	P::detect_available_blocks(transport.request(), transport.node(), &sections, &caps, rate_mode, &mut available, ROUTER_TIMEOUT_MS)
+		.map_err(|error| format!("Failed to detect DICE route ports: {error}"))?;
+	let mut current = CurrentRouterParams { entries: RouterParams::default(), rate_mode };
+	P::cache_extension_whole_params(transport.request(), transport.node(), &sections, &caps, &mut current, ROUTER_TIMEOUT_MS)
+		.map_err(|error| format!("Failed to read current DICE router: {error}"))?;
+	let routes = available.1.iter().copied().map(|destination| {
+		let source_id = current.entries.0.iter().find(|entry| entry.dst == destination)
+			.and_then(|entry| (entry.src.id != SrcBlkId::Mute).then(|| source_port_id(entry.src)));
+		RouterRoute { destination_id: destination_port_id(destination), source_id }
+	}).collect();
+	Ok(RouterRoutesSnapshot { sample_rate: global.current_rate, routes })
 }
 
 pub fn raw_routes(node_path: &str) -> Result<Vec<SavedRoute>, String> {
@@ -381,19 +428,6 @@ fn read_router_snapshot_for<P: RouterProtocol>(
 	)
 	.map_err(|error| format!("Failed to read current DICE router: {error}"))?;
 
-	let mut peaks = PeakParams::default();
-	if caps.general.peak_avail {
-		P::cache_extension_whole_params(
-			transport.request(),
-			transport.node(),
-			&sections,
-			&caps,
-			&mut peaks,
-			ROUTER_TIMEOUT_MS,
-		)
-		.map_err(|error| format!("Failed to read DICE router peaks: {error}"))?;
-	}
-
 	let sources = available
 		.0
 		.iter()
@@ -422,12 +456,6 @@ fn read_router_snapshot_for<P: RouterProtocol>(
 			let source_id = route.and_then(|entry| {
 				(entry.src.id != SrcBlkId::Mute).then(|| source_port_id(entry.src))
 			});
-			let peak_db = peaks
-				.0
-				.0
-				.iter()
-				.find(|entry| entry.dst == destination)
-				.and_then(|entry| crate::families::dice_eap::matrix::peak_to_db(entry.peak));
 			RouterDestination {
 				port: RouterPort {
 					id: destination_port_id(destination),
@@ -436,7 +464,6 @@ fn read_router_snapshot_for<P: RouterProtocol>(
 					stereo_partner_id: None,
 				},
 				source_id,
-				peak_db,
 			}
 		})
 		.collect::<Vec<_>>();
@@ -465,6 +492,7 @@ fn read_router_snapshot_for<P: RouterProtocol>(
 	Ok(RouterSnapshot {
 		state: RouterState {
 			node: node_path.to_owned(),
+			sample_rate: global.current_rate,
 			sources,
 			destinations,
 			matrix_row_labels,
